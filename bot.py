@@ -45,13 +45,21 @@ async def leave(ctx):
 async def on_ready():
     print(f'Logged in as {bot.user}')
     
-    # รันซ่าจะไปทักทายทุกห้องในรายการนี้ตอนออนไลน์
-    rooms_to_greet = [1432597021436678216, 1432595987951521864]
+    # ส่วนเช็กโมเดลที่ใช้งานได้ (จะแสดงใน Logs ของ Render)
+    print("--- รายชื่อโมเดลที่ API Key นี้ใช้ได้ ---")
+    try:
+        for m in genai.list_models():
+            if 'generateContent' in m.supported_generation_methods:
+                print(f"รุ่นที่ใช้ได้: {m.name}")
+    except Exception as e:
+        print(f"เช็กรายชื่อรุ่นไม่ได้เพราะ: {e}")
     
+    # ทักทายห้องแชท
+    rooms_to_greet = [1432597021436678216, 1432595987951521864]
     for room_id in rooms_to_greet:
         channel = bot.get_channel(room_id)
         if channel:
-            await channel.send("รันซ่า ตัวป่วนมาทักทายห้องนี้แล้วจ้าาา 👻")
+            await channel.send("รันซ่า ตัวป่วนฟื้นคืนชีพแล้วจ้าาา 👻")
 
 @bot.event
 async def on_message(message):
