@@ -20,7 +20,6 @@ intents.message_content = True
 bot = commands.Bot(command_prefix='!', intents=intents)
 
 # ตั้งค่า Groq Client
-# ใช้ .get() เพื่อป้องกัน Error ถ้าลืมใส่ตัวแปรคีย์ใน Render
 groq_api_key = os.environ.get('GROQ_API_KEY')
 client = Groq(api_key=groq_api_key) if groq_api_key else None
 
@@ -44,12 +43,11 @@ async def leave(ctx):
 @bot.event
 async def on_ready():
     print(f'Logged in as {bot.user}')
-    # ส่วนทักทาย
     rooms_to_greet = [1432597021436678216, 1432595987951521864]
     for room_id in rooms_to_greet:
         channel = bot.get_channel(room_id)
         if channel:
-            await channel.send("รันซ่า ตัวป่วนฟื้นคืนชีพ แล้วจ้าาา 👻")
+            await channel.send("รันซ่า ตัวป่วนฟื้นคืนชีพ (เวอร์ชัน Groq) แล้วจ้าาา 👻")
 
 @bot.event
 async def on_message(message):
@@ -64,7 +62,6 @@ async def on_message(message):
 
         async with message.channel.typing():
             try:
-                # ใช้รุ่น llama-3.3-70b-versatile เป็นตัวหลักที่ Groq แนะนำตอนนี้
                 completion = client.chat.completions.create(
                     model="llama-3.3-70b-versatile",
                     messages=[
@@ -72,7 +69,16 @@ async def on_message(message):
                         {"role": "user", "content": message.content}
                     ]
                 )
-                await message.channel.send(completion.choices[0].message.content)
+                
+                response_text = completion.choices[0].message.content
+                
+                if not response_text:
+                    await message.channel.send("รันซ่าพูดไม่ออกอะแก... เครื่องมันเอ๋อ!")
+                elif len(response_text) > 1900:
+                    await message.channel.send(response_text[:1900] + "\n...(ข้อความยาวไปนะแก รันซ่าขี้เกียจพิมพ์)")
+                else:
+                    await message.channel.send(response_text)
+
             except Exception as e:
                 await message.channel.send(f"แกเอ๊ย... รันซ่าช็อต! Error: {str(e)[:50]}")
 
