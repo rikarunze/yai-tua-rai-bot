@@ -22,16 +22,23 @@ bot = commands.Bot(command_prefix='!', intents=intents)
 genai.configure(api_key=os.environ['GEMINI_API_KEY'])
 model = genai.GenerativeModel('gemini-1.5-flash')
 
-# 3. คำสั่งบอท
+# 3. คำสั่งบอท (Join & Leave)
 @bot.command()
 async def join(ctx):
     if ctx.author.voice:
         channel = ctx.author.voice.channel
         await channel.connect()
-        # --- แก้ตรงนี้! ---
         await ctx.send("รันซ่า ตัวป่วนมาสิงแล้วจ้าาา 👻")
     else:
         await ctx.send("แกยังไม่ได้เข้าห้องเสียงเลย จะให้รันซ่าตามไปที่ไหนล่ะยะ!")
+
+@bot.command()
+async def leave(ctx):
+    if ctx.voice_client:
+        await ctx.voice_client.disconnect()
+        await ctx.send("รันซ่าไปละนะ ไว้เจอกันใหม่แก! 👻")
+    else:
+        await ctx.send("รันซ่ายังไม่ได้อยู่ในห้องเสียงเลย จะให้ออกไปไหนล่ะยะ!")
 
 # 4. ส่วนของการคุยโต้ตอบ
 @bot.event
