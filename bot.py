@@ -28,7 +28,7 @@ async def join(ctx):
     if ctx.author.voice:
         channel = ctx.author.voice.channel
         await channel.connect()
-        await ctx.send("รันซ่ามาตามคำขอแล้วจ้า!")
+        await ctx.send("รันซ่ามาสิงแล้วจ้าาา 👻")
     else:
         await ctx.send("แกยังไม่ได้เข้าห้องเสียงเลย จะให้รันซ่าตามไปที่ไหนล่ะยะ!")
 
