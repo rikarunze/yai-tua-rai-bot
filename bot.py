@@ -19,10 +19,12 @@ intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix='!', intents=intents)
 
-# ตั้งค่า Groq Client (ดึงคีย์มาจาก Environment Variable: GROQ_API_KEY)
-client = Groq(api_key=os.environ['GROQ_API_KEY'])
+# ตั้งค่า Groq Client
+# ใช้ .get() เพื่อป้องกัน Error ถ้าลืมใส่ตัวแปรคีย์ใน Render
+groq_api_key = os.environ.get('GROQ_API_KEY')
+client = Groq(api_key=groq_api_key) if groq_api_key else None
 
-# 3. คำสั่งบอท (Join & Leave)
+# 3. คำสั่งบอท
 @bot.command()
 async def join(ctx):
     if ctx.author.voice:
@@ -42,12 +44,12 @@ async def leave(ctx):
 @bot.event
 async def on_ready():
     print(f'Logged in as {bot.user}')
-    # ส่วนของ on_ready ที่ขาดไป ส้มเติมให้แล้วแก!
+    # ส่วนทักทาย
     rooms_to_greet = [1432597021436678216, 1432595987951521864]
     for room_id in rooms_to_greet:
         channel = bot.get_channel(room_id)
         if channel:
-            await channel.send("รันซ่า ตัวป่วนฟื้นคืนชีพ (ในเวอร์ชัน Groq) แล้วจ้าาา 👻")
+            await channel.send("รันซ่า ตัวป่วนฟื้นคืนชีพ แล้วจ้าาา 👻")
 
 @bot.event
 async def on_message(message):
@@ -56,11 +58,15 @@ async def on_message(message):
     await bot.process_commands(message)
 
     if bot.user.mentioned_in(message) or message.content.startswith("รันซ่า"):
+        if client is None:
+            await message.channel.send("แกเอ๊ย... ลืมใส่ GROQ_API_KEY ใน Render หรือเปล่า? รันซ่าเลยเชื่อมต่อไม่ได้!")
+            return
+
         async with message.channel.typing():
             try:
-                # เรียกใช้งาน Llama 3 ของ Groq
+                # ใช้รุ่น llama-3.3-70b-versatile เป็นตัวหลักที่ Groq แนะนำตอนนี้
                 completion = client.chat.completions.create(
-                    model="llama3-70b-8192",
+                    model="llama-3.3-70b-versatile",
                     messages=[
                         {"role": "system", "content": "แกคือ 'รันซ่า' เพื่อนซี้ของฉัน: ผมสีฟ้า ตาสีชมพู พูดจาวัยรุ่นไทย (ปังปุริเย่, เริ่ด, แกเอ๊ย) กวนๆ แต่อบอุ่น ห้ามบอกว่าตัวเองเป็น AI โดยเด็ดขาด!"},
                         {"role": "user", "content": message.content}
@@ -68,8 +74,8 @@ async def on_message(message):
                 )
                 await message.channel.send(completion.choices[0].message.content)
             except Exception as e:
-                await message.channel.send(f"แกเอ๊ย... รันซ่าช็อต! Groq Error: {str(e)[:50]}")
+                await message.channel.send(f"แกเอ๊ย... รันซ่าช็อต! Error: {str(e)[:50]}")
 
 if __name__ == "__main__":
     threading.Thread(target=run_flask).start()
-    bot.run(os.environ['DISCORD_TOKEN'])
+    bot.run(os.environ.get('DISCORD_TOKEN'))
