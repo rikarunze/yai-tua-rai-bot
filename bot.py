@@ -1,46 +1,47 @@
 import discord
 from discord.ext import commands
 import os
+import threading
 from flask import Flask
-from threading import Thread
+import google.generativeai as genai
 
-# --- ส่วนของ Web Server หลอกๆ เพื่อให้ Render เห็นว่า Live ---
-app = Flask('')
-
+# 1. ตั้งค่า Flask (เพื่อหลอก Render ว่าเราเป็นเว็บ)
+app = Flask(__name__)
 @app.route('/')
 def home():
-    return "ยัยตัวร้ายออนไลน์อยู่โว้ย!"
+    return "Bot is alive!"
 
-def run():
+def run_flask():
     app.run(host='0.0.0.0', port=8080)
 
-def keep_alive():
-    t = Thread(target=run)
-    t.start()
-# --------------------------------------------------------
-
-# ตั้งค่าบอท
+# 2. ตั้งค่า Discord & Gemini
 intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix='!', intents=intents)
 
+genai.configure(api_key=os.environ['GEMINI_API_KEY'])
+model = genai.GenerativeModel('gemini-1.5-flash')
+
+# 3. ส่วนของการคุยโต้ตอบ
 @bot.event
 async def on_ready():
-    print(f'✅ ยัยตัวร้ายรายงานตัว! บอทออนไลน์แล้วเว้ยยย!')
+    print(f'Logged in as {bot.user}')
 
-@bot.command()
-async def join(ctx):
-    if ctx.author.voice:
-        channel = ctx.author.voice.channel
-        await channel.connect()
-        await ctx.send("เข้ามาสิงแล้วจ้าาา 👻")
-    else:
-        await ctx.send("แกต้องเข้าห้องเสียงก่อนดิโว้ย ถึงจะเรียกชั้นเข้าไปได้!")
+@bot.event
+async def on_message(message):
+    if message.author == bot.user:
+        return
 
-# เรียกฟังก์ชันเปิด Web Server ก่อนรันบอท
-keep_alive()
+    # ถ้าพิมพ์คำว่า "ส้ม" หรืออยากให้บอทตอบ ให้ AI ทำงาน
+    # ตรงนี้คือส่วนที่แกคุยกับบอทได้เลย!
+    if bot.user.mentioned_in(message) or message.content.startswith("ส้ม"):
+        async with message.channel.typing():
+            response = model.generate_content(f"แกคือเพื่อนซี้เจน Z ของฉัน ชอบพูดจาผ่อนคลาย ใช้คำศัพท์วัยรุ่น กวนประสาทนิดๆ: {message.content}")
+            await message.channel.send(response.text)
 
-# รันบอท
+    await bot.process_commands(message)
+
+# 4. รันพร้อมกัน 2 อย่าง
 if __name__ == "__main__":
-    TOKEN = os.environ['TOKEN']
-    bot.run(TOKEN)
+    threading.Thread(target=run_flask).start()
+    bot.run(os.environ['DISCORD_TOKEN'])
