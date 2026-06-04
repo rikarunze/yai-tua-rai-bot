@@ -5,7 +5,7 @@ import threading
 from flask import Flask
 import google.generativeai as genai
 
-# 1. ตั้งค่า Flask (เพื่อหลอก Render ว่าเราเป็นเว็บ)
+# 1. ตั้งค่า Flask
 app = Flask(__name__)
 @app.route('/')
 def home():
@@ -22,24 +22,32 @@ bot = commands.Bot(command_prefix='!', intents=intents)
 genai.configure(api_key=os.environ['GEMINI_API_KEY'])
 model = genai.GenerativeModel('gemini-1.5-flash')
 
-# 3. ส่วนของการคุยโต้ตอบและคำสั่ง
+# 3. คำสั่งบอท (เอาส่วนที่แกใช้จริงมาแปะตรงนี้)
+@bot.command()
+async def join(ctx):
+    if ctx.author.voice:
+        channel = ctx.author.voice.channel
+        await channel.connect()
+        await ctx.send("รันซ่ามาตามคำขอแล้วจ้า!")
+    else:
+        await ctx.send("แกยังไม่ได้เข้าห้องเสียงเลย จะให้รันซ่าตามไปที่ไหนล่ะยะ!")
+
+# 4. ส่วนของการคุยโต้ตอบ
 @bot.event
 async def on_ready():
     print(f'Logged in as {bot.user}')
 
 @bot.event
 async def on_message(message):
-    # ไม่ตอบข้อความตัวเอง
     if message.author == bot.user:
         return
 
-    # ให้ระบบประมวลผลคำสั่งที่เป็น ! (เช่น !join) ก่อนเสมอ
+    # ให้ระบบประมวลผลคำสั่ง ! ก่อนเสมอ
     await bot.process_commands(message)
 
-    # เช็กว่าเป็นการเรียก 'รันซ่า' หรือไม่
+    # เช็กว่าเรียก 'รันซ่า' ไหม
     if bot.user.mentioned_in(message) or message.content.startswith("รันซ่า"):
         async with message.channel.typing():
-            # รันซ่าเวอร์ชันตัวแม่มาแล้วจ้า
             response = model.generate_content(f"""
                 แกคือ 'รันซ่า' เพื่อนซี้ของฉัน
                 - อายุ: เป็นความลับนาซ่า (ห้ามบอกใคร)
@@ -57,7 +65,7 @@ async def on_message(message):
             """)
             await message.channel.send(response.text)
 
-# 4. รันพร้อมกัน
+# 5. รันพร้อมกัน
 if __name__ == "__main__":
     threading.Thread(target=run_flask).start()
     bot.run(os.environ['DISCORD_TOKEN'])
