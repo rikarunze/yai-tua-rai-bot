@@ -3,7 +3,7 @@ from discord.ext import commands
 
 # ⚠️ เอา Token ที่ก๊อปเก็บไว้ตอนแรกมาใส่ตรงนี้ 
 # (ให้มันอยู่ในเครื่องหมาย ' ' เหมือนเดิมนะเว้ย)
-TOKEN = 'MTUxMTkxMDM4MTk3MzU0MDkzNQ.GTPO8K.KQzP8b3gS5uz15Mt0wdCZ5f3ljJ9E7VYJ0yxKA'
+TOKEN = 'MTUxMTkxMDM4MTk3MzU0MDkzNQ.GM2ILx.7t4CjcNedoFSikOvJPbHvaxCiwTrazuI6S4mdU'
 
 intents = discord.Intents.default()
 intents.message_content = True
