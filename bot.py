@@ -20,7 +20,7 @@ intents.message_content = True
 bot = commands.Bot(command_prefix='!', intents=intents)
 
 genai.configure(api_key=os.environ['GEMINI_API_KEY'])
-model = genai.GenerativeModel('gemini-1.5-flash-latest')
+model = genai.GenerativeModel(model_name='gemini-1.0-pro')
 
 # 3. คำสั่งบอท (Join & Leave)
 @bot.command()
