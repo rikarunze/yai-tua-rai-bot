@@ -5,7 +5,7 @@ import threading
 from flask import Flask
 import google.generativeai as genai
 
-# 1. ตั้งค่า Flask
+# 1. ตั้งค่า Flask (เพื่อหลอก Render ว่าเราเป็นเว็บ)
 app = Flask(__name__)
 @app.route('/')
 def home():
@@ -22,17 +22,21 @@ bot = commands.Bot(command_prefix='!', intents=intents)
 genai.configure(api_key=os.environ['GEMINI_API_KEY'])
 model = genai.GenerativeModel('gemini-1.5-flash')
 
-# 3. ส่วนของการคุยโต้ตอบ
+# 3. ส่วนของการคุยโต้ตอบและคำสั่ง
 @bot.event
 async def on_ready():
     print(f'Logged in as {bot.user}')
 
 @bot.event
 async def on_message(message):
+    # ไม่ตอบข้อความตัวเอง
     if message.author == bot.user:
         return
 
-    # ตรงนี้แหละแก! รันซ่ารอตอบแกอยู่
+    # ให้ระบบประมวลผลคำสั่งที่เป็น ! (เช่น !join) ก่อนเสมอ
+    await bot.process_commands(message)
+
+    # เช็กว่าเป็นการเรียก 'รันซ่า' หรือไม่
     if bot.user.mentioned_in(message) or message.content.startswith("รันซ่า"):
         async with message.channel.typing():
             # รันซ่าเวอร์ชันตัวแม่มาแล้วจ้า
@@ -52,8 +56,6 @@ async def on_message(message):
                 คำถามของฉันคือ: {message.content}
             """)
             await message.channel.send(response.text)
-
-    await bot.process_commands(message)
 
 # 4. รันพร้อมกัน
 if __name__ == "__main__":
