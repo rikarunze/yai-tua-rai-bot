@@ -1,12 +1,12 @@
 import discord
 from discord.ext import commands
+import os
 
-# ⚠️ เอา Token ที่ก๊อปเก็บไว้ตอนแรกมาใส่ตรงนี้ 
-# (ให้มันอยู่ในเครื่องหมาย ' ' เหมือนเดิมนะเว้ย)
-TOKEN = 'MTUxMTkxMDM4MTk3MzU0MDkzNQ.GM2ILx.7t4CjcNedoFSikOvJPbHvaxCiwTrazuI6S4mdU'
-
+# ตั้งค่าสิ่งที่บอททำได้ (Intents)
 intents = discord.Intents.default()
 intents.message_content = True
+
+# สร้างตัวบอท
 bot = commands.Bot(command_prefix='!', intents=intents)
 
 @bot.event
@@ -15,6 +15,7 @@ async def on_ready():
 
 @bot.command()
 async def join(ctx):
+    # ตรวจสอบว่าคนเรียกอยู่ในห้องเสียงหรือไม่
     if ctx.author.voice:
         channel = ctx.author.voice.channel
         await channel.connect()
@@ -22,4 +23,11 @@ async def join(ctx):
     else:
         await ctx.send("แกต้องเข้าห้องเสียงก่อนดิโว้ย ถึงจะเรียกชั้นเข้าไปได้!")
 
-bot.run(TOKEN)
+# ดึง Token จาก Environment Variables ที่เราตั้งไว้ใน Render
+# วิธีนี้ปลอดภัยและยาม GitHub จะไม่ระเบิด Token แกทิ้งแล้ว!
+if __name__ == "__main__":
+    try:
+        TOKEN = os.environ['TOKEN']
+        bot.run(TOKEN)
+    except KeyError:
+        print("❌ Error: ยังไม่ได้ตั้งค่า TOKEN ใน Environment ของ Render นะแก!")
