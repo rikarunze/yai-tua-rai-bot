@@ -22,13 +22,14 @@ bot = commands.Bot(command_prefix='!', intents=intents)
 genai.configure(api_key=os.environ['GEMINI_API_KEY'])
 model = genai.GenerativeModel('gemini-1.5-flash')
 
-# 3. คำสั่งบอท (เอาส่วนที่แกใช้จริงมาแปะตรงนี้)
+# 3. คำสั่งบอท
 @bot.command()
 async def join(ctx):
     if ctx.author.voice:
         channel = ctx.author.voice.channel
         await channel.connect()
-        await ctx.send("รันซ่ามาสิงแล้วจ้าาา 👻")
+        # --- แก้ตรงนี้! ---
+        await ctx.send("รันซ่า ตัวป่วนมาสิงแล้วจ้าาา 👻")
     else:
         await ctx.send("แกยังไม่ได้เข้าห้องเสียงเลย จะให้รันซ่าตามไปที่ไหนล่ะยะ!")
 
@@ -36,16 +37,22 @@ async def join(ctx):
 @bot.event
 async def on_ready():
     print(f'Logged in as {bot.user}')
+    
+    # รันซ่าจะไปทักทายทุกห้องในรายการนี้ตอนออนไลน์
+    rooms_to_greet = [1432597021436678216, 1432595987951521864]
+    
+    for room_id in rooms_to_greet:
+        channel = bot.get_channel(room_id)
+        if channel:
+            await channel.send("รันซ่า ตัวป่วนมาทักทายห้องนี้แล้วจ้าาา 👻")
 
 @bot.event
 async def on_message(message):
     if message.author == bot.user:
         return
 
-    # ให้ระบบประมวลผลคำสั่ง ! ก่อนเสมอ
     await bot.process_commands(message)
 
-    # เช็กว่าเรียก 'รันซ่า' ไหม
     if bot.user.mentioned_in(message) or message.content.startswith("รันซ่า"):
         async with message.channel.typing():
             response = model.generate_content(f"""
@@ -65,7 +72,6 @@ async def on_message(message):
             """)
             await message.channel.send(response.text)
 
-# 5. รันพร้อมกัน
 if __name__ == "__main__":
     threading.Thread(target=run_flask).start()
     bot.run(os.environ['DISCORD_TOKEN'])
