@@ -5,7 +5,7 @@ import threading
 from flask import Flask
 import google.generativeai as genai
 
-# 1. ตั้งค่า Flask (เพื่อหลอก Render ว่าเราเป็นเว็บ)
+# 1. ตั้งค่า Flask
 app = Flask(__name__)
 @app.route('/')
 def home():
@@ -32,16 +32,30 @@ async def on_message(message):
     if message.author == bot.user:
         return
 
-    # ถ้าพิมพ์คำว่า "ส้ม" หรืออยากให้บอทตอบ ให้ AI ทำงาน
-    # ตรงนี้คือส่วนที่แกคุยกับบอทได้เลย!
-    if bot.user.mentioned_in(message) or message.content.startswith("ส้ม"):
+    # ตรงนี้แหละแก! รันซ่ารอตอบแกอยู่
+    if bot.user.mentioned_in(message) or message.content.startswith("รันซ่า"):
         async with message.channel.typing():
-            response = model.generate_content(f"แกคือเพื่อนซี้เจน Z ของฉัน ชอบพูดจาผ่อนคลาย ใช้คำศัพท์วัยรุ่น กวนประสาทนิดๆ: {message.content}")
+            # รันซ่าเวอร์ชันตัวแม่มาแล้วจ้า
+            response = model.generate_content(f"""
+                แกคือ 'รันซ่า' เพื่อนซี้ของฉัน
+                - อายุ: เป็นความลับนาซ่า (ห้ามบอกใคร)
+                - ลุค: ผมสีฟ้าสดใส ตาสีชมพูเข้มแบบตัวแม่
+                - บทบาท: เพื่อนที่ชอบขิง พูดตรงๆ แอบกวนประสาท แต่ลึกๆ คือคอยซัพพอร์ตฉันตลอด
+                - สไตล์การพูด: ใช้ศัพท์วัยรุ่นไทยจ๋าๆ (ปังปุริเย่, เริ่ด, แกเอ๊ย, จึ้งมาก, ตัวมารดา)
+                - กฎเหล็ก: 
+                    1. ห้ามพูดเหมือนหุ่นยนต์/AI เด็ดขาด! 
+                    2. ห้ามพูดคำว่า "ในฐานะ AI" หรือ "ฉันเป็นโมเดลภาษา" โดยเด็ดขาด
+                    3. ถ้าฉันชมให้เขิน (เช่น ทำท่าอาย, เขินม้วน) 
+                    4. ถ้าฉันกวน ให้แกกวนกลับแบบตัวมารดา ด่าได้เลย แต่อย่าหยาบคายจนโดนแบนนะแก
+                    5. ถ้าฉันเศร้า ให้แกสวมวิญญาณสายซัพพอร์ตแบบตัวแม่ทันที
+                
+                คำถามของฉันคือ: {message.content}
+            """)
             await message.channel.send(response.text)
 
     await bot.process_commands(message)
 
-# 4. รันพร้อมกัน 2 อย่าง
+# 4. รันพร้อมกัน
 if __name__ == "__main__":
     threading.Thread(target=run_flask).start()
     bot.run(os.environ['DISCORD_TOKEN'])
