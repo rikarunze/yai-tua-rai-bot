@@ -1,12 +1,27 @@
 import discord
 from discord.ext import commands
 import os
+from flask import Flask
+from threading import Thread
 
-# ตั้งค่าสิ่งที่บอททำได้ (Intents)
+# --- ส่วนของ Web Server หลอกๆ เพื่อให้ Render เห็นว่า Live ---
+app = Flask('')
+
+@app.route('/')
+def home():
+    return "ยัยตัวร้ายออนไลน์อยู่โว้ย!"
+
+def run():
+    app.run(host='0.0.0.0', port=8080)
+
+def keep_alive():
+    t = Thread(target=run)
+    t.start()
+# --------------------------------------------------------
+
+# ตั้งค่าบอท
 intents = discord.Intents.default()
 intents.message_content = True
-
-# สร้างตัวบอท
 bot = commands.Bot(command_prefix='!', intents=intents)
 
 @bot.event
@@ -15,7 +30,6 @@ async def on_ready():
 
 @bot.command()
 async def join(ctx):
-    # ตรวจสอบว่าคนเรียกอยู่ในห้องเสียงหรือไม่
     if ctx.author.voice:
         channel = ctx.author.voice.channel
         await channel.connect()
@@ -23,11 +37,10 @@ async def join(ctx):
     else:
         await ctx.send("แกต้องเข้าห้องเสียงก่อนดิโว้ย ถึงจะเรียกชั้นเข้าไปได้!")
 
-# ดึง Token จาก Environment Variables ที่เราตั้งไว้ใน Render
-# วิธีนี้ปลอดภัยและยาม GitHub จะไม่ระเบิด Token แกทิ้งแล้ว!
+# เรียกฟังก์ชันเปิด Web Server ก่อนรันบอท
+keep_alive()
+
+# รันบอท
 if __name__ == "__main__":
-    try:
-        TOKEN = os.environ['TOKEN']
-        bot.run(TOKEN)
-    except KeyError:
-        print("❌ Error: ยังไม่ได้ตั้งค่า TOKEN ใน Environment ของ Render นะแก!")
+    TOKEN = os.environ['TOKEN']
+    bot.run(TOKEN)
