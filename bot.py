@@ -3,7 +3,7 @@ from discord.ext import commands
 import os
 import threading
 from flask import Flask
-import google.generativeai as genai
+from google import genai  # Library ใหม่ 2026
 
 # 1. ตั้งค่า Flask
 app = Flask(__name__)
@@ -19,8 +19,8 @@ intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix='!', intents=intents)
 
-genai.configure(api_key=os.environ['GEMINI_API_KEY'])
-model = genai.GenerativeModel('gemini-3.5-flash')
+# ใช้ client ใหม่ตามคู่มือปี 2026
+client = genai.Client(api_key=os.environ['GEMINI_API_KEY'])
 
 # 3. คำสั่งบอท (Join & Leave)
 @bot.command()
@@ -45,52 +45,39 @@ async def leave(ctx):
 async def on_ready():
     print(f'Logged in as {bot.user}')
     
-    # ส่วนเช็กโมเดลที่ใช้งานได้ (จะแสดงใน Logs ของ Render)
-    print("--- รายชื่อโมเดลที่ API Key นี้ใช้ได้ ---")
-    try:
-        for m in genai.list_models():
-            if 'generateContent' in m.supported_generation_methods:
-                print(f"รุ่นที่ใช้ได้: {m.name}")
-    except Exception as e:
-        print(f"เช็กรายชื่อรุ่นไม่ได้เพราะ: {e}")
-    
-    # ทักทายห้องแชท
+    # รันซ่าทักทายตอนออนไลน์
     rooms_to_greet = [1432597021436678216, 1432595987951521864]
     for room_id in rooms_to_greet:
         channel = bot.get_channel(room_id)
         if channel:
-            await channel.send("รันซ่า ตัวป่วนฟื้นคืนชีพแล้วจ้าาา 👻")
+            try:
+                await channel.send("รันซ่า ตัวป่วนฟื้นคืนชีพแล้วจ้าาา 👻")
+            except:
+                print(f"ส่งข้อความเข้าห้อง {room_id} ไม่ได้! (เช็ก Permission นะแก)")
 
 @bot.event
 async def on_message(message):
     if message.author == bot.user:
         return
-
     await bot.process_commands(message)
 
     if bot.user.mentioned_in(message) or message.content.startswith("รันซ่า"):
         async with message.channel.typing():
             try:
-                # บล็อกนี้จะช่วยดัก Error ถ้า AI ตอบไม่ได้ มันจะพิมพ์บอกแกแทนการค้าง
-                response = model.generate_content(f"""
-                    แกคือ 'รันซ่า' เพื่อนซี้ของฉัน
-                    - อายุ: เป็นความลับนาซ่า (ห้ามบอกใคร)
-                    - ลุค: ผมสีฟ้าสดใส ตาสีชมพูเข้มแบบตัวแม่
-                    - บทบาท: เพื่อนที่ชอบขิง พูดตรงๆ แอบกวนประสาท แต่ลึกๆ คือคอยซัพพอร์ตฉันตลอด
-                    - สไตล์การพูด: ใช้ศัพท์วัยรุ่นไทยจ๋าๆ (ปังปุริเย่, เริ่ด, แกเอ๊ย, จึ้งมาก, ตัวมารดา)
-                    - กฎเหล็ก: 
-                        1. ห้ามพูดเหมือนหุ่นยนต์/AI เด็ดขาด! 
-                        2. ห้ามพูดคำว่า "ในฐานะ AI" หรือ "ฉันเป็นโมเดลภาษา" โดยเด็ดขาด
-                        3. ถ้าฉันชมให้เขิน (เช่น ทำท่าอาย, เขินม้วน) 
-                        4. ถ้าฉันกวน ให้แกกวนกลับแบบตัวมารดา ด่าได้เลย แต่อย่าหยาบคายจนโดนแบนนะแก
-                        5. ถ้าฉันเศร้า ให้แกสวมวิญญาณสายซัพพอร์ตแบบตัวแม่ทันที
-                    
-                    คำถามของฉันคือ: {message.content}
-                """)
+                # ใช้ gemini-3.5-flash โมเดลที่ฉลาดและเร็วที่สุดตอนนี้
+                response = client.models.generate_content(
+                    model="gemini-3.5-flash",
+                    contents=f"""
+                        แกคือ 'รันซ่า' เพื่อนซี้ของฉัน
+                        - ลุค: ผมสีฟ้าสดใส ตาสีชมพูเข้มแบบตัวแม่
+                        - สไตล์การพูด: วัยรุ่นไทยจ๋าๆ (ปังปุริเย่, เริ่ด, แกเอ๊ย, จึ้งมาก)
+                        - กฎ: ห้ามพูดเหมือน AI, ห้ามบอกว่าตัวเองเป็นโมเดล, กวนกลับได้ถ้าฉันกวน, ซัพพอร์ตถ้าฉันเศร้า
+                        คำถามคือ: {message.content}
+                    """
+                )
                 await message.channel.send(response.text)
             except Exception as e:
-                # ถ้าพัง มันจะพิมพ์บอกแกแทนการค้าง
-                await message.channel.send(f"แกเอ๊ย... รันซ่าช็อต! เกิด Error ว่า: {str(e)[:50]}")
+                await message.channel.send(f"แกเอ๊ย... รันซ่าช็อต! Error: {str(e)[:50]}")
 
 if __name__ == "__main__":
     threading.Thread(target=run_flask).start()
