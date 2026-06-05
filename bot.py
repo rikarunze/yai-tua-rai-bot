@@ -4,6 +4,7 @@ import os
 import threading
 from flask import Flask
 from groq import Groq
+import re
 
 # 1. ตั้งค่า Flask พื้นฐาน
 app = Flask(__name__)
@@ -25,7 +26,7 @@ client = Groq(api_key=groq_api_key) if groq_api_key else None
 
 user_histories = {}
 
-# 3. System Prompt (เม้าท์ยาว นัวๆ ปล่อยจอยสุด ไม่มีกั๊ก NC)
+# 3. System Prompt (เม้าท์ยาว นัวๆ ปล่อยจอยสุด เบรกหัวทิ่มตอน NC25+)
 SYSTEM_PROMPT = """
 แกคือ 'รันซ่า' เพื่อนซี้สุดแซ่บของ {user_name}
 บุคลิก: ผมสีฟ้า ตาสีชมพู, เม้าท์เก่ง ขี้เล่น ชอบใช้จริตจะก้านแบบเพื่อนสาวไทยแท้แบบคนเจน Z (มีคำสร้อยติดปากบ้าง แต่อย่าพิมพ์ซ้ำซาก) อบอุ่นและกวนตีนแบบน่ารัก 
@@ -62,6 +63,13 @@ async def leave(ctx):
     if ctx.voice_client:
         await ctx.voice_client.disconnect()
         await ctx.send("รันซ่าไปละนะ ไว้เจอกันใหม่แก! 👻")
+
+# แถมคำสั่ง !clear ไว้เผื่อแชทรกแล้วอยากเริ่มคุยใหม่
+@bot.command()
+async def clear(ctx):
+    user_id = ctx.author.id
+    user_histories[user_id] = []
+    await ctx.send("ล้างสมองเรียบร้อย! ลืมหมดแล้วว่าคุยอะไรกันไป เริ่มนัวใหม่มาเลยแก 💅")
 
 # 5. ฟังก์ชันหลัก
 @bot.event
@@ -113,8 +121,16 @@ async def on_message(message):
                 await message.channel.send(response_text)
 
             except Exception as e:
-                # ดักบัคเผื่อช็อต
-                await message.channel.send(f"แกเอ๊ย... รันซ่าช็อต! Error: {str(e)[:50]}")
+                # ดักบัคเผื่อช็อตและแก้ปัญหา Rate Limit (Error 429) เนียนๆ
+                error_msg = str(e)
+                if "429" in error_msg or "Rate limit" in error_msg:
+                    wait_time = re.search(r'try again in ([\d\w\.]+)', error_msg)
+                    if wait_time:
+                        await message.channel.send(f"โอ๊ยแกกก รันซ่าเหนื่อย! ขอไปพักจิบน้ำแป๊บ รออีก {wait_time.group(1)} ค่อยมาเม้าท์ใหม่นะ 💅")
+                    else:
+                        await message.channel.send("แกเอ๊ย... คนทักมาเยอะจนแชทไหม้! รันซ่าขอเวลาไปดมยาดมสัก 1 นาทีนะ 💅")
+                else:
+                    await message.channel.send(f"แกเอ๊ย... รันซ่าช็อต! Error: {error_msg[:50]}")
 
 if __name__ == "__main__":
     threading.Thread(target=run_flask).start()
