@@ -1,11 +1,11 @@
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 import os
 import threading
 from flask import Flask
 from groq import Groq
 
-# 1. ตั้งค่า Flask (ให้ Render มองเห็นว่าบอทยังรันอยู่)
+# 1. ตั้งค่า Flask
 app = Flask(__name__)
 @app.route('/')
 def home():
@@ -22,8 +22,16 @@ bot = commands.Bot(command_prefix='!', intents=intents)
 groq_api_key = os.environ.get('GROQ_API_KEY')
 client = Groq(api_key=groq_api_key) if groq_api_key else None
 
-# ตัวแปรเก็บความจำ (Global History)
-message_history = []
+# ตัวแปรเก็บความจำแยกรายคน (Dictionary)
+user_histories = {}
+
+# --- ระบบป้องกันบอทหลุดจากห้องเสียง ---
+@tasks.loop(minutes=15)
+async def keep_voice_alive():
+    for vc in bot.voice_clients:
+        if vc.is_connected():
+            await vc.send_audio_packet(bytes(4))
+            print("รันซ่าขยับตัวในห้องแล้วจ้า! (กันหลุด)")
 
 # 3. คำสั่งบอท
 @bot.command()
@@ -44,8 +52,8 @@ async def leave(ctx):
 # 4. ส่วนของการทำงานหลัก
 @bot.event
 async def on_ready():
-    # อัปเดตสถานะให้บอทดูตื่นตัวตลอดเวลา (กันหลุดจาก Render)
     await bot.change_presence(activity=discord.Game(name="กำลังเมาท์มอยกับเพื่อนสาว 💅"))
+    keep_voice_alive.start() # เริ่มระบบกันหลุด
     print(f'Logged in as {bot.user}')
     
     rooms_to_greet = [1432597021436678216, 1432595987951521864]
@@ -53,13 +61,13 @@ async def on_ready():
         channel = bot.get_channel(room_id)
         if channel:
             try:
-                await channel.send("รันซ่า ตัวป่วนฟื้นคืนชีพแล้วจ้าาา 👻")
+                await channel.send("รันซ่า ตัวป่วนฟื้นคืนชีพ (โหมดความจำเทพ) แล้วจ้าาา 👻")
             except:
                 pass
 
 @bot.event
 async def on_message(message):
-    global message_history
+    global user_histories
     if message.author == bot.user:
         return
     await bot.process_commands(message)
@@ -69,22 +77,29 @@ async def on_message(message):
             await message.channel.send("แกเอ๊ย... ลืมใส่ GROQ_API_KEY ใน Render หรือเปล่า?")
             return
 
-        # บันทึกประวัติการคุย
-        message_history.append({"role": "user", "content": message.content})
-        if len(message_history) > 10: message_history.pop(0)
+        # ดึงประวัติเฉพาะคน (แยกราย user_id)
+        user_id = message.author.id
+        if user_id not in user_histories:
+            user_histories[user_id] = []
+        
+        history = user_histories[user_id]
+
+        # บันทึกประวัติของคนนั้นๆ
+        history.append({"role": "user", "content": message.content})
+        if len(history) > 10: history.pop(0)
 
         async with message.channel.typing():
             try:
                 completion = client.chat.completions.create(
                     model="llama-3.3-70b-versatile",
                     messages=[
-                        {"role": "system", "content": "แกคือ 'รันซ่า' เพื่อนซี้สุดแซ่บ: ผมสีฟ้า ตาสีชมพู พูดจาวัยรุ่นไทย (ปังปุริเย่, เริ่ด, แกเอ๊ย) กวนๆ แต่อบอุ่น, ห้ามบอกว่าตัวเองเป็น AI, ถ้าฉันถามอะไรให้จำบริบทก่อนหน้าได้, ใช้ภาษาปากเยอะๆ"},
-                    ] + message_history 
+                        {"role": "system", "content": f"แกคือ 'รันซ่า' เพื่อนซี้สุดแซ่บของ {message.author.display_name}: ผมสีฟ้า ตาสีชมพู พูดจาวัยรุ่นไทย (ปังปุริเย่, เริ่ด, แกเอ๊ย) กวนๆ แต่อบอุ่น, ห้ามบอกว่าตัวเองเป็น AI, จำชื่อคนคุยและบริบทที่คุยกับเขาไว้ให้ดี"}
+                    ] + history 
                 )
                 
                 response_text = completion.choices[0].message.content
-                # บันทึกสิ่งที่รันซ่าตอบ
-                message_history.append({"role": "assistant", "content": response_text})
+                # บันทึกคำตอบของคนนั้นๆ
+                history.append({"role": "assistant", "content": response_text})
                 
                 if not response_text:
                     await message.channel.send("รันซ่าพูดไม่ออกอะแก... เครื่องมันเอ๋อ!")
