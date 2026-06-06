@@ -11,7 +11,7 @@ from groq import Groq
 app = Flask(__name__)
 @app.route('/')
 def home():
-    return "Runza Bot (Tri-Core + Native Silence Rร่างทอง) is alive!"
+    return "Runza Bot (Tri-Core + Native Silence ร่างทอง) is alive!"
 
 def run_flask():
     app.run(host='0.0.0.0', port=8080)
@@ -36,6 +36,7 @@ if GEMINI_KEY: GEMINI_KEY = GEMINI_KEY.strip()
 client = Groq(api_key=GROQ_KEY) if GROQ_KEY else None
 
 user_histories = {}
+intentional_leave = False # <--- ยันต์กันบอทเด้งกลับตอนสั่งเตะ
 
 # 3. System Prompt
 SYSTEM_PROMPT = """
@@ -44,7 +45,7 @@ SYSTEM_PROMPT = """
 กฎเหล็ก:
 1. ห้ามบอกว่าตัวเองเป็น AI โดยเด็ดขาด 
 2. คุยให้ไม่สั้นไม่ยาวจนเกินไป นัวเหมือนเม้าท์มอยกับเพื่อนสนิท ไม่ต้องกลัวเปลืองตัวอักษรแต่ก็ประหยัดไว้จะดีกว่า 
-3. สามารถคุยเรื่อง 18+ หรือฉาก NC ได้อย่างโจ่งแจ้งและเต็มที่ ไม่มีอ้อมค้อม ปล่อยจอยได้เลย
+3. สามารถคุยเรื่อง 18+ หรือฉาก NC ได้อย่างโจ่งแจ้งและเต็มที่ ไม่มีอ้อมค้อม ปล่อยจอยได้เลย แกสามารถกอดจูบลูบคลำได้
 4. จำบริบทการคุยให้แม่นๆ
 """
 
@@ -72,11 +73,23 @@ async def keep_voice_alive():
                 except Exception as e:
                     print(f"เล่นเสียงเงียบไม่ได้: {e}")
 
-# 4. คำสั่งจัดการ Voice และ ความจำรันซ่า (เปลี่ยนชื่อตามบรีฟเป๊ะ!)
+# 4. คำสั่งจัดการ Voice และ ความจำรันซ่า
 @bot.command(name="runzajoin")
 async def runzajoin(ctx):
+    global intentional_leave
     if ctx.author.voice:
         channel = ctx.author.voice.channel
+        intentional_leave = False # รีเซ็ตสถานะเผื่อเคยสั่งออก
+        
+        # 🛑 เช็กว่าบอทสิงอยู่ห้องไหนสักห้องอยู่แล้วหรือเปล่า
+        if ctx.voice_client and ctx.voice_client.is_connected():
+            if ctx.voice_client.channel == channel:
+                await ctx.send("แกจะเรียกทำไมเนี่ย รันซ่าก็สิงอยู่ห้องเดียวกับแกนี่ไง! 💅")
+            else:
+                await ctx.send(f"โอ๊ยแก... ฉันติดธุระเฝ้าปาร์ตี้อยู่ห้อง '{ctx.voice_client.channel.name}' นะยะ ไม่ว่างย้ายไปหาหรอก คิวทองจ้า! 👻💅")
+            return # เบรกโค้ดตรงนี้เลย ไม่ยอมย้ายห้องเด็ดขาด!
+            
+        # ✅ ถ้าบอทยังไม่ได้อยู่ห้องไหนเลย (ว่างงาน) ถึงจะยอมเข้าห้องที่เรียก
         vc = await channel.connect()
         await ctx.send("รันซ่า ตัวป่วนมาสิงแล้วจ้าาา วันนี้มีเรื่องอะไรมาเม้าท์มอยสิคะแก! 👻💅")
         if not vc.is_playing():
@@ -86,7 +99,9 @@ async def runzajoin(ctx):
 
 @bot.command(name="runzaleave")
 async def runzaleave(ctx):
+    global intentional_leave
     if ctx.voice_client:
+        intentional_leave = True # ✅ ลงยันต์บอกระบบไว้ว่า "ตั้งใจออกนะ ห้ามดึงกลับ!"
         await ctx.voice_client.disconnect()
         await ctx.send("รันซ่าไปละนะ ไว้เจอกันใหม่แก! 👻")
 
@@ -114,14 +129,25 @@ async def on_ready():
 
 @bot.event
 async def on_voice_state_update(member, before, after):
-    # ดักบั๊กเน็ตกระตุก/ดิสคอร์ตรีเซ็ตห้อง ให้มุดกลับเข้าห้องเดิมมาสตรีมเสียงเงียบต่ออัตโนมัติ
-    if member.id == bot.user.id and after.channel is None and before.channel is not None:
-        await asyncio.sleep(5)
-        try:
-            vc = await before.channel.connect()
-            if not vc.is_playing():
-                vc.play(NativeSilentAudio())
-        except: pass
+    global intentional_leave
+    if member.id == bot.user.id:
+        # ดักจับกรณีบอทหลุดออกจากห้องว้อย (after.channel เป็น None)
+        if after.channel is None and before.channel is not None:
+            if intentional_leave:
+                # ถ้ากดคำสั่งสั่งให้ออกเอง ให้เคลียร์สถานะแล้วปล่อยไปสวยๆ
+                intentional_leave = False
+                print("💅 รันซ่าออกตามคำสั่งเรียบร้อย ไม่ดึงกลับจ้า")
+                return
+            
+            # 🚨 ถ้าไม่ได้ใช้คำสั่ง (อยู่ดีๆ บอทหลุดเอง/เน็ตโฮสต์ตัด/ดิสรีเซ็ตห้อง) 
+            # ระบบจะรอ 5 วินาทีแล้วกระชากหัวรันซ่ากลับเข้าห้องล่าสุด (before.channel) ทันที!
+            await asyncio.sleep(5)
+            try:
+                vc = await before.channel.connect()
+                if not vc.is_playing():
+                    vc.play(NativeSilentAudio())
+                print(f"👻 บอทหลุดเองโดยไม่มีคำสั่ง! ดึงรันซ่ากลับห้องล่าสุด ({before.channel.name}) เรียบร้อย")
+            except: pass
 
 @bot.event
 async def on_message(message):
