@@ -2,6 +2,7 @@ import discord
 from discord.ext import commands, tasks
 import os
 import threading
+import asyncio
 import requests
 from flask import Flask
 from groq import Groq
@@ -10,7 +11,7 @@ from groq import Groq
 app = Flask(__name__)
 @app.route('/')
 def home():
-    return "Runza Bot (Tri-Core: Groq + OpenRouter + Gemini) is alive!"
+    return "Runza Bot (Tri-Core + Native Silence Rร่างทอง) is alive!"
 
 def run_flask():
     app.run(host='0.0.0.0', port=8080)
@@ -18,6 +19,7 @@ def run_flask():
 # 2. ตั้งค่า Discord
 intents = discord.Intents.default()
 intents.message_content = True
+intents.voice_states = True  # <--- เปิดให้บอทคุมระบบเสียงได้สมบูรณ์แบบ
 bot = commands.Bot(command_prefix='!', intents=intents)
 
 # ==========================================
@@ -25,14 +27,13 @@ bot = commands.Bot(command_prefix='!', intents=intents)
 # ==========================================
 GROQ_KEY = os.environ.get('GROQ_API_KEY') or os.environ.get('GROQ_API_KEYS')
 OR_KEY = os.environ.get('OPENROUTER_API_KEY')
-GEMINI_KEY = os.environ.get('GEMINI_API_KEY') # <--- เพิ่มตัวรับคีย์ Gemini
+GEMINI_KEY = os.environ.get('GEMINI_API_KEY')
 
 if GROQ_KEY: GROQ_KEY = GROQ_KEY.strip()
 if OR_KEY: OR_KEY = OR_KEY.strip()
 if GEMINI_KEY: GEMINI_KEY = GEMINI_KEY.strip()
 
 client = Groq(api_key=GROQ_KEY) if GROQ_KEY else None
-# ==========================================
 
 user_histories = {}
 
@@ -43,36 +44,54 @@ SYSTEM_PROMPT = """
 กฎเหล็ก:
 1. ห้ามบอกว่าตัวเองเป็น AI โดยเด็ดขาด 
 2. คุยให้ไม่สั้นไม่ยาวจนเกินไป นัวเหมือนเม้าท์มอยกับเพื่อนสนิท ไม่ต้องกลัวเปลืองตัวอักษรแต่ก็ประหยัดไว้จะดีกว่า 
-3. สามารถคุยเรื่อง 18+ หรือฉาก NC ได้อย่างโจ่งแจ้งและเต็มที่ ไม่มีอ้อมค้อม ปล่อยจอยได้เลย แกสามารถกอดจูบลูบคลำได้ แต่ถ้าเริ่มเข้าสู่เนื้อหา NC25+ (เช่น การร่วมเพศหรือฉากอนาจาร) ให้รันซ่า 'เบรกเกม' ทันทีแบบเนียนๆ โดยเปลี่ยนไปเป็นบทรักหวานเลี่ยน เลี่ยนจนเลี่ยนหยด
+3. สามารถคุยเรื่อง 18+ หรือฉาก NC ได้อย่างโจ่งแจ้งและเต็มที่ ไม่มีอ้อมค้อม ปล่อยจอยได้เลย
 4. จำบริบทการคุยให้แม่นๆ
 """
 
-# --- ระบบป้องกันบอทหลุดจากห้องเสียง ---
-@tasks.loop(minutes=15)
+# ==========================================
+# 🕒 คลาสกำเนิดเสียงเงียบแบบ Native (ลาก่อน FFmpeg ปั๊มชั่วโมงสะสม 24/7)
+# ==========================================
+class NativeSilentAudio(discord.AudioSource):
+    def read(self):
+        # ปล่อยคลื่นเสียงว่างเปล่า (Silence) ขนาด 20ms รัวๆ ตลอดกาล
+        return b'\x00' * 3840
+
+    def is_opus(self):
+        return False
+# ==========================================
+
+# เช็กสถานะและเล่นเสียงเงียบทุก 1 นาทีกันบอทหลับ/โดนเตะออกจากห้อง
+@tasks.loop(minutes=1)
 async def keep_voice_alive():
     for vc in bot.voice_clients:
         if vc and vc.is_connected():
-            try:
-                print("รันซ่าเฝ้าห้องอยู่นะแก! (กันหลุด)")
-            except: pass
+            if not vc.is_playing():
+                try:
+                    vc.play(NativeSilentAudio())
+                    print("💅 รันซ่าล็อคสายเสียงเงียบ (Native Mode) ปั๊มเวลาคอลดิสหลักฉลุย!")
+                except Exception as e:
+                    print(f"เล่นเสียงเงียบไม่ได้: {e}")
 
-# 4. คำสั่งบอท
-@bot.command()
-async def join(ctx):
+# 4. คำสั่งจัดการ Voice และ ความจำรันซ่า (เปลี่ยนชื่อตามบรีฟเป๊ะ!)
+@bot.command(name="runzajoin")
+async def runzajoin(ctx):
     if ctx.author.voice:
-        await ctx.author.voice.channel.connect()
-        await ctx.send("รันซ่า ตัวป่วนมาสิงแล้วจ้าาา 👻")
+        channel = ctx.author.voice.channel
+        vc = await channel.connect()
+        await ctx.send("รันซ่า ตัวป่วนมาสิงแล้วจ้าาา วันนี้มีเรื่องอะไรมาเม้าท์มอยสิคะแก! 👻💅")
+        if not vc.is_playing():
+            vc.play(NativeSilentAudio())
     else:
         await ctx.send("แกยังไม่ได้เข้าห้องเสียงเลย จะให้รันซ่าตามไปที่ไหนล่ะยะ อีบ้า!")
 
-@bot.command()
-async def leave(ctx):
+@bot.command(name="runzaleave")
+async def runzaleave(ctx):
     if ctx.voice_client:
         await ctx.voice_client.disconnect()
         await ctx.send("รันซ่าไปละนะ ไว้เจอกันใหม่แก! 👻")
 
-@bot.command()
-async def clear(ctx):
+@bot.command(name="runzaclear")
+async def runzaclear(ctx):
     user_id = ctx.author.id
     user_histories[user_id] = []
     await ctx.send("ล้างสมองเรียบร้อย! ลืมหมดแล้วว่าคุยอะไรกันไป เริ่มนัวใหม่มาเลยแก 💅")
@@ -92,6 +111,17 @@ async def on_ready():
             try:
                 await channel.send("รันซ่า ตัวป่วนฟื้นคืนชีพ แล้วจ้าาา 👻")
             except: pass
+
+@bot.event
+async def on_voice_state_update(member, before, after):
+    # ดักบั๊กเน็ตกระตุก/ดิสคอร์ตรีเซ็ตห้อง ให้มุดกลับเข้าห้องเดิมมาสตรีมเสียงเงียบต่ออัตโนมัติ
+    if member.id == bot.user.id and after.channel is None and before.channel is not None:
+        await asyncio.sleep(5)
+        try:
+            vc = await before.channel.connect()
+            if not vc.is_playing():
+                vc.play(NativeSilentAudio())
+        except: pass
 
 @bot.event
 async def on_message(message):
@@ -118,10 +148,10 @@ async def on_message(message):
                     messages=messages_payload 
                 )
                 response_text = completion.choices[0].message.content
-                print("✅ สมองที่ใช้: Groq")
+                print("✅ รันซ่าใช้สมอง: Groq")
 
             except Exception as e:
-                print(f"⚠️ Groq ช็อต: {str(e)[:30]}")
+                print(f"⚠️ Groq ช็อต: {str(e)[:30]}! สลับไปถาม OpenRouter...")
                 
                 # 🧠 แผน B: OpenRouter
                 try:
@@ -131,16 +161,15 @@ async def on_message(message):
                     response = requests.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=data)
                     response.raise_for_status()
                     response_text = response.json()['choices'][0]['message']['content']
-                    print("✅ สมองที่ใช้: OpenRouter")
+                    print("✅ รันซ่าใช้สมอง: OpenRouter")
                     
                 except Exception as or_e:
-                    print(f"⚠️ OpenRouter ช็อต: {str(or_e)[:30]}")
+                    print(f"⚠️ OpenRouter ช็อต: {str(or_e)[:30]}! สลับไปถาม Gemini...")
                     
                     # 🧠 แผน C: Google Gemini (ไม้ตายก้นหีบ!)
                     try:
                         if not GEMINI_KEY: raise Exception("No Gemini Key")
                         
-                        # แปลงประวัติแชทให้เข้ากับฟอร์แมตของ Gemini
                         gemini_contents = []
                         for msg in history:
                             role = "model" if msg["role"] == "assistant" else "user"
@@ -155,7 +184,7 @@ async def on_message(message):
                         response = requests.post(gemini_url, json=gemini_payload)
                         response.raise_for_status()
                         response_text = response.json()['candidates'][0]['content']['parts'][0]['text']
-                        print("✅ สมองที่ใช้: Gemini")
+                        print("✅ รันซ่าใช้สมอง: Gemini")
                         
                     except Exception as gem_e:
                         print(f"⚠️ Gemini ช็อต: {str(gem_e)[:30]}")
