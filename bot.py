@@ -2,6 +2,7 @@ import discord
 from discord.ext import commands, tasks
 import os
 import threading
+import requests  # <--- อย่าลืมเช็กใน requirements.txt ว่ามีคำว่า requests ด้วยนะแก
 from flask import Flask
 from groq import Groq
 import re
@@ -10,7 +11,7 @@ import re
 app = Flask(__name__)
 @app.route('/')
 def home():
-    return "Runza Bot (Unlimited Fun + Auto Key Rotation) is alive!"
+    return "Runza Bot (Dual-Core: Groq + OpenRouter) is alive!"
 
 def run_flask():
     app.run(host='0.0.0.0', port=8080)
@@ -21,24 +22,15 @@ intents.message_content = True
 bot = commands.Bot(command_prefix='!', intents=intents)
 
 # ==========================================
-# 🔑 ระบบสลับ API Key สุดปังของรันซ่า (Key Rotation)
+# 🔑 ระบบสมองสองซีก (Dual-Core AI)
 # ==========================================
-keys_env = os.environ.get('GROQ_API_KEYS', '') 
-# ดึงคีย์ทั้งหมดมาแยกเป็น List
-API_KEYS = [k.strip() for k in keys_env.split(',') if k.strip()]
-current_key_idx = 0
+GROQ_KEY = os.environ.get('GROQ_API_KEY') or os.environ.get('GROQ_API_KEYS')
+OR_KEY = os.environ.get('OPENROUTER_API_KEY')
 
-# ฟังก์ชันสลับไปใช้ Key ตัวถัดไป
-def get_next_client():
-    global current_key_idx
-    if not API_KEYS:
-        return None
-    current_key_idx = (current_key_idx + 1) % len(API_KEYS)
-    print(f"🔄 รันซ่าสำลักน้ำ! สลับไปใช้สมองสำรอง (API Key ที่ {current_key_idx + 1}) แล้วจ้า!")
-    return Groq(api_key=API_KEYS[current_key_idx])
+if GROQ_KEY: GROQ_KEY = GROQ_KEY.strip()
+if OR_KEY: OR_KEY = OR_KEY.strip()
 
-# ตั้งค่า Client เริ่มต้นด้วยคีย์แรก
-client = Groq(api_key=API_KEYS[0]) if API_KEYS else None
+client = Groq(api_key=GROQ_KEY) if GROQ_KEY else None
 # ==========================================
 
 user_histories = {}
@@ -90,7 +82,8 @@ async def clear(ctx):
 @bot.event
 async def on_ready():
     await bot.change_presence(activity=discord.Game(name="กำลังเม้าท์มอยกับเพื่อนสาว 💅"))
-    keep_voice_alive.start()
+    if not keep_voice_alive.is_running():
+        keep_voice_alive.start()
     print(f'Logged in as {bot.user}')
     
     rooms_to_greet = [1432597021436678216, 1432595987951521864]
@@ -103,15 +96,10 @@ async def on_ready():
 
 @bot.event
 async def on_message(message):
-    global client
     if message.author == bot.user: return
     await bot.process_commands(message)
 
     if bot.user.mentioned_in(message) or message.content.startswith("รันซ่า"):
-        if client is None:
-            await message.channel.send("แกเอ๊ย... ลืมใส่ GROQ_API_KEYS ในโฮสต์หรือเปล่า? รันซ่าไม่มีสมองนะยะ!")
-            return
-
         user_id = message.author.id
         if user_id not in user_histories: user_histories[user_id] = []
         history = user_histories[user_id]
@@ -122,31 +110,54 @@ async def on_message(message):
         if len(history) > 12: history.pop(0) 
 
         async with message.channel.typing():
+            response_text = ""
+            system_instruction = SYSTEM_PROMPT.format(user_name=message.author.display_name)
+            messages_payload = [{"role": "system", "content": system_instruction}] + history
+
             try:
-                system_instruction = SYSTEM_PROMPT.format(user_name=message.author.display_name)
+                # 🧠 แผน A: พยายามใช้ Groq ก่อน (ไวและฉลาด)
+                if not client:
+                    raise Exception("400: No Groq Client Configured")
+                    
                 completion = client.chat.completions.create(
                     model="llama-3.3-70b-versatile",
-                    messages=[{"role": "system", "content": system_instruction}] + history 
+                    messages=messages_payload 
                 )
-                
                 response_text = completion.choices[0].message.content
-                
-                history.append({"role": "assistant", "content": response_text})
-                await message.channel.send(response_text)
+                print("✅ รันซ่าใช้สมอง: Groq")
 
             except Exception as e:
                 error_msg = str(e)
-                # เมื่อลิมิตเต็ม (429) รันซ่าจะตีเนียนสลับสมองทันที
-                if "429" in error_msg or "Rate limit" in error_msg:
-                    client = get_next_client() # สลับคีย์ชึบๆ
-                    
-                    # ตอบแบบฟีลเพื่อนสาวหลุดโฟกัส
-                    await message.channel.send("โอ๊ยแก... เมื่อกี้มีผู้หล่อเดินผ่าน ฉันเลยเหม่อไปนิดนึง แกพิมพ์ว่าอะไรนะเมื่อกี้ เอาใหม่อีกรอบซิ 💅")
-                    
-                    # ลบข้อความที่พังทิ้ง จะได้เริ่มประมวลผลใหม่รอบหน้าแบบเนียนๆ
-                    history.pop()
+                print(f"⚠️ Groq ช็อต ({error_msg[:30]})! รันซ่าสลับไปหา OpenRouter...")
+                
+                # 🧠 แผน B: ถ้า Groq พัง/ติดลิมิต ให้ดึง OpenRouter มาใช้
+                if OR_KEY and ("429" in error_msg or "400" in error_msg or "Rate limit" in error_msg):
+                    try:
+                        headers = {
+                            "Authorization": f"Bearer {OR_KEY}",
+                        }
+                        data = {
+                            "model": "meta-llama/llama-3-8b-instruct:free",
+                            "messages": messages_payload
+                        }
+                        response = requests.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=data)
+                        or_data = response.json()
+                        
+                        response_text = or_data['choices'][0]['message']['content']
+                        print("✅ รันซ่าใช้สมอง: OpenRouter (สำรอง)")
+                        
+                    except Exception as or_e:
+                        await message.channel.send("โอ๊ยแก... เมื่อกี้มีผู้หล่อเดินผ่าน ฉันเลยเหม่อไปนิดนึง แกพิมพ์ว่าอะไรนะ พิมพ์มาใหม่อีกรอบซิ 💅")
+                        history.pop()
+                        return
                 else:
-                    await message.channel.send(f"แกเอ๊ย... รันซ่าช็อต! Error: {error_msg[:50]}")
+                    await message.channel.send("แกเอ๊ย... ลืมใส่ API KEY ในหน้าตั้งค่าหรือเปล่า? รันซ่าไม่มีสมองนะยะ! 💅")
+                    history.pop()
+                    return
+
+            if response_text:
+                history.append({"role": "assistant", "content": response_text})
+                await message.channel.send(response_text)
 
 if __name__ == "__main__":
     threading.Thread(target=run_flask).start()
