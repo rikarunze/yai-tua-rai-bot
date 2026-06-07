@@ -79,6 +79,11 @@ async def on_voice_state_update(member, before, after):
             except: pass
 
 # --- Slash Commands ---
+@bot.tree.command(name="nickname", description="ตั้งชื่อเล่นที่ต้องการให้ไอย์เรียก")
+async def nickname(interaction: discord.Interaction, name: str):
+    user_nicknames[interaction.user.id] = name
+    await interaction.response.send_message(f"ไอย์จะเรียกคุณอาว่า **\"{name}\"** นะคะ! 💖")
+
 @bot.tree.command(name="girlstat", description="เช็คสถานะความรู้สึกของไอย์")
 async def girlstat(interaction: discord.Interaction):
     status = user_stats.get(interaction.user.id, 'กำลังอ่อยคุณอาอยู่นะคะ...')
@@ -95,6 +100,10 @@ async def girljoin(interaction: discord.Interaction):
     if interaction.user.voice:
         channel = interaction.user.voice.channel
         intentional_leave = False
+        if interaction.guild.voice_client and interaction.guild.voice_client.is_connected():
+            if interaction.guild.voice_client.channel != channel:
+                await interaction.response.send_message(f"คุณอาขา... ไอย์ติดธุระเฝ้าห้อง '{interaction.guild.voice_client.channel.name}' อยู่ค่ะ คิวไอย์แน่นนะรู้ยัง? 💖")
+            return
         vc = await channel.connect()
         vc.play(NativeSilentAudio())
         await interaction.response.send_message("ไอย์มาแล้วค่ะคุณอา... อยากให้ไอย์นั่งเฝ้าใช่ไหมคะ? 💖")
@@ -122,7 +131,10 @@ async def on_message(message):
     if uid not in user_histories: user_histories[uid] = []
     hist = user_histories[uid]
     
-    hist.append({"role": "user", "content": message.content})
+    display_name = user_nicknames.get(uid, message.author.display_name)
+    user_context_msg = f"[{display_name} พูดว่า]: {message.content}"
+    
+    hist.append({"role": "user", "content": user_context_msg})
     if len(hist) > 15: hist.pop(0)
 
     async with message.channel.typing():
