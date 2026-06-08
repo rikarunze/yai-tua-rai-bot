@@ -104,25 +104,27 @@ async def girljoin(interaction: discord.Interaction):
     channel = interaction.user.voice.channel
     intentional_leave = False
     
-    # ถ้าบอทอยู่ในห้องอยู่แล้ว
-    if interaction.guild.voice_client and interaction.guild.voice_client.is_connected():
-        if interaction.guild.voice_client.channel != channel:
-            await interaction.response.send_message(f"ไอย์ติดธุระเฝ้าห้อง '{interaction.guild.voice_client.channel.name}' อยู่ค่ะ...")
-        else:
+    # 🚨 แก้ไขจุดนี้: ถ้าบอทมีสถานะค้างอยู่ ให้สั่งตัดการเชื่อมต่อทิ้งก่อนเข้าใหม่
+    if interaction.guild.voice_client:
+        if interaction.guild.voice_client.channel == channel:
             await interaction.response.send_message("ไอย์อยู่ในห้องกับคุณอาแล้วไงคะ? 💖")
-        return
+            return
+        else:
+            # ถ้าติดค้างในห้องอื่น ให้บังคับออกก่อน
+            try:
+                await interaction.guild.voice_client.disconnect(force=True)
+            except:
+                pass
 
-    # พยายามเชื่อมต่อพร้อม Error Handling
-    await interaction.response.defer() # กัน Timeout ระหว่างรอเชื่อมต่อ
+    await interaction.response.defer()
     try:
-        # ใช้ timeout ที่สั้นลงนิดนึงเพื่อเช็คการตอบสนอง
-        vc = await asyncio.wait_for(channel.connect(), timeout=10.0)
+        vc = await asyncio.wait_for(channel.connect(), timeout=15.0)
         vc.play(NativeSilentAudio())
         await interaction.followup.send("ไอย์มาแล้วค่ะคุณอา... รอตั้งนานแน่ะ! 💖")
     except asyncio.TimeoutError:
-        await interaction.followup.send("ไอย์เชื่อมต่อกับห้องไม่ได้เลยค่ะ... เน็ตอาจจะมีปัญหานิดหน่อย ลองเรียกไอย์ใหม่อีกทีนะคะ 🥺")
+        await interaction.followup.send("ไอย์เชื่อมต่อกับห้องไม่ได้เลยค่ะ... เน็ตอาจจะมีปัญหานิดหน่อย 🥺")
     except Exception as e:
-        await interaction.followup.send(f"เกิดข้อผิดพลาดบางอย่างค่ะ: {str(e)}")
+        await interaction.followup.send(f"เกิดข้อผิดพลาดในการเชื่อมต่อค่ะ: {str(e)}")
 
 @bot.tree.command(name="girlleave", description="ให้ไอย์ออกจากห้องว้อย")
 async def girlleave(interaction: discord.Interaction):
