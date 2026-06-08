@@ -97,17 +97,32 @@ async def girlclear(interaction: discord.Interaction):
 @bot.tree.command(name="girljoin", description="ให้ไอย์เข้าห้องว้อย")
 async def girljoin(interaction: discord.Interaction):
     global intentional_leave
-    if interaction.user.voice:
-        channel = interaction.user.voice.channel
-        intentional_leave = False
-        if interaction.guild.voice_client and interaction.guild.voice_client.is_connected():
-            if interaction.guild.voice_client.channel != channel:
-                await interaction.response.send_message(f"คุณอาขา... ไอย์ติดธุระเฝ้าห้อง '{interaction.guild.voice_client.channel.name}' อยู่ค่ะ คิวไอย์แน่นนะรู้ยัง? 💖")
-            return
-        vc = await channel.connect()
+    if not interaction.user.voice:
+        await interaction.response.send_message("ต้องเข้าห้องว้อยก่อนสิคะ ไอย์ถึงจะตามไปได้")
+        return
+
+    channel = interaction.user.voice.channel
+    intentional_leave = False
+    
+    # ถ้าบอทอยู่ในห้องอยู่แล้ว
+    if interaction.guild.voice_client and interaction.guild.voice_client.is_connected():
+        if interaction.guild.voice_client.channel != channel:
+            await interaction.response.send_message(f"ไอย์ติดธุระเฝ้าห้อง '{interaction.guild.voice_client.channel.name}' อยู่ค่ะ...")
+        else:
+            await interaction.response.send_message("ไอย์อยู่ในห้องกับคุณอาแล้วไงคะ? 💖")
+        return
+
+    # พยายามเชื่อมต่อพร้อม Error Handling
+    await interaction.response.defer() # กัน Timeout ระหว่างรอเชื่อมต่อ
+    try:
+        # ใช้ timeout ที่สั้นลงนิดนึงเพื่อเช็คการตอบสนอง
+        vc = await asyncio.wait_for(channel.connect(), timeout=10.0)
         vc.play(NativeSilentAudio())
-        await interaction.response.send_message("ไอย์มาแล้วค่ะคุณอา... อยากให้ไอย์นั่งเฝ้าใช่ไหมคะ? 💖")
-    else: await interaction.response.send_message("ต้องเข้าห้องว้อยก่อนสิคะ ไอย์ถึงจะตามไปได้")
+        await interaction.followup.send("ไอย์มาแล้วค่ะคุณอา... รอตั้งนานแน่ะ! 💖")
+    except asyncio.TimeoutError:
+        await interaction.followup.send("ไอย์เชื่อมต่อกับห้องไม่ได้เลยค่ะ... เน็ตอาจจะมีปัญหานิดหน่อย ลองเรียกไอย์ใหม่อีกทีนะคะ 🥺")
+    except Exception as e:
+        await interaction.followup.send(f"เกิดข้อผิดพลาดบางอย่างค่ะ: {str(e)}")
 
 @bot.tree.command(name="girlleave", description="ให้ไอย์ออกจากห้องว้อย")
 async def girlleave(interaction: discord.Interaction):
