@@ -2,3 +2,5 @@ discord.py[voice]
 flask
 groq
 requests
+discord.py>=2.4.0
+PyNaCl
